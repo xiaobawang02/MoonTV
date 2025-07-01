@@ -1,5 +1,5 @@
 pnpm run dev
 
 git add .
-git commit -m "更新了 config.json 文件，添加了新的资源站"
+git commit -m "docs: 更新 config.json，添加新资源站点"
 git push origin main
