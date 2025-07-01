@@ -65,7 +65,7 @@ const MobileBottomNav = ({ activePath }: MobileBottomNavProps) => {
   ];
 
   const { siteName } = useSite();
-  if (siteName !== 'MoonTV') {
+  if (siteName !== '个人博客') {
     navItems.push({
       icon: Github,
       label: '个人博客',

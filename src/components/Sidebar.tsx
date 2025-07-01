@@ -167,7 +167,7 @@ const Sidebar = ({ onToggle, activePath = '/' }: SidebarProps) => {
   ];
 
   const { siteName } = useSite();
-  if (siteName !== 'MoonTV') {
+  if (siteName !== '个人博客') {
     menuItems.push({
       icon: Github,
       label: '个人博客',

@@ -1,5 +1,5 @@
 pnpm run dev
 
 git add .
-git commit -m "docs: 修改了链接地址"
+git commit -m "docs: 修改了链接 地址"
 git push origin main
