@@ -68,8 +68,8 @@ const MobileBottomNav = ({ activePath }: MobileBottomNavProps) => {
   if (siteName !== 'MoonTV') {
     navItems.push({
       icon: Github,
-      label: 'MoonTV',
-      href: 'https://github.com/senshinya/MoonTV',
+      label: '个人博客',
+      href: 'https://119188.xyz',
     });
   }
 
