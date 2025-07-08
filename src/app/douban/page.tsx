@@ -189,7 +189,7 @@ function DoubanPageClient() {
           ) : (
             <>
               {/* 内容网格 */}
-              <div className='grid grid-cols-3 gap-x-2 gap-y-12 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fit,minmax(160px,1fr))] sm:gap-x-8 sm:gap-y-20 sm:px-4'>
+              <div className='grid grid-cols-3 gap-x-2 gap-y-12 px-0 sm:px-2 sm:grid-cols-[repeat(auto-fit,minmax(160px,1fr))] sm:gap-x-8 sm:gap-y-20'>
                 {loading
                   ? // 显示骨架屏
                     skeletonData.map((index) => (
@@ -199,9 +199,11 @@ function DoubanPageClient() {
                     doubanData.map((item, index) => (
                       <div key={`${item.title}-${index}`} className='w-full'>
                         <DemoCard
+                          id={item.id}
                           title={item.title}
                           poster={item.poster}
                           rate={item.rate}
+                          type={type || 'movie'}
                         />
                       </div>
                     ))}

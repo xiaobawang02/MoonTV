@@ -4,19 +4,19 @@
 export const config = {
   cache_time: 7200,
   api_site: {
-    dyttzy: {
-      api: 'http://caiji.dyttzyapi.com/api.php/provide/vod',
-      name: '电影天堂资源',
-      detail: 'http://caiji.dyttzyapi.com',
+    heimuer: {
+      api: 'https://json.heimuer.xyz/api.php/provide/vod',
+      name: '黑木耳',
+      detail: 'https://heimuer.tv',
     },
     ruyi: {
       api: 'https://cj.rycjapi.com/api.php/provide/vod',
       name: '如意资源',
     },
-    heimuer: {
-      api: 'https://json.heimuer.xyz/api.php/provide/vod',
-      name: '黑木耳',
-      detail: 'https://heimuer.tv',
+    dyttzy: {
+      api: 'http://caiji.dyttzyapi.com/api.php/provide/vod',
+      name: '电影天堂资源',
+      detail: 'http://caiji.dyttzyapi.com',
     },
     bfzy: {
       api: 'https://bfzyapi.com/api.php/provide/vod',
@@ -42,10 +42,6 @@ export const config = {
     wolong: {
       api: 'https://wolongzyw.com/api.php/provide/vod',
       name: '卧龙资源',
-    },
-    hwba: {
-      api: 'https://cjhwba.com/api.php/provide/vod',
-      name: '华为吧资源',
     },
     jisu: {
       api: 'https://jszyapi.com/api.php/provide/vod',
