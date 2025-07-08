@@ -5,7 +5,7 @@
 import Artplayer from 'artplayer';
 import Hls from 'hls.js';
 import { Heart } from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useRef, useState } from 'react';
 
 import {
@@ -33,12 +33,17 @@ declare global {
 }
 
 function PlayPageClient() {
+  const router = useRouter();
   const searchParams = useSearchParams();
 
   // -----------------------------------------------------------------------------
   // 状态变量（State）
   // -----------------------------------------------------------------------------
   const [loading, setLoading] = useState(true);
+  const [loadingStage, setLoadingStage] = useState<
+    'searching' | 'fetching' | 'ready'
+  >('searching');
+  const [loadingMessage, setLoadingMessage] = useState('正在搜索播放源...');
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<VideoDetail | null>(null);
 
@@ -46,7 +51,7 @@ function PlayPageClient() {
   const [favorited, setFavorited] = useState(false);
 
   // 去广告开关（从 localStorage 继承，默认 true）
-  const [blockAdEnabled, _setBlockAdEnabled] = useState<boolean>(() => {
+  const [blockAdEnabled, setBlockAdEnabled] = useState<boolean>(() => {
     if (typeof window !== 'undefined') {
       const v = localStorage.getItem('enable_blockad');
       if (v !== null) return v === 'true';
@@ -55,10 +60,6 @@ function PlayPageClient() {
   });
 
   // 视频基本信息
-  const [videoType, setVideoType] = useState(searchParams.get('type') || '');
-  const [videoDoubanId, setVideoDoubanId] = useState(
-    searchParams.get('douban_id') || ''
-  );
   const [videoTitle, setVideoTitle] = useState(searchParams.get('title') || '');
   const [videoYear, setVideoYear] = useState(searchParams.get('year') || '');
   const [videoCover, setVideoCover] = useState('');
@@ -74,6 +75,7 @@ function PlayPageClient() {
   const currentSourceRef = useRef(currentSource);
   const currentIdRef = useRef(currentId);
   const videoTitleRef = useRef(videoTitle);
+  const videoYearRef = useRef(videoYear);
   const detailRef = useRef<VideoDetail | null>(detail);
   const currentEpisodeIndexRef = useRef(currentEpisodeIndex);
 
@@ -84,7 +86,15 @@ function PlayPageClient() {
     detailRef.current = detail;
     currentEpisodeIndexRef.current = currentEpisodeIndex;
     videoTitleRef.current = videoTitle;
-  }, [currentSource, currentId, detail, currentEpisodeIndex, videoTitle]);
+    videoYearRef.current = videoYear;
+  }, [
+    currentSource,
+    currentId,
+    detail,
+    currentEpisodeIndex,
+    videoTitle,
+    videoYear,
+  ]);
 
   // 视频播放地址
   const [videoUrl, setVideoUrl] = useState('');
@@ -246,8 +256,10 @@ function PlayPageClient() {
       if (!currentSource && !currentId) {
         // 只包含视频标题，搜索视频
         setLoading(true);
+        setLoadingStage('searching');
+        setLoadingMessage('🔍 正在搜索播放源...');
+
         const searchResults = await handleSearchSources(videoTitle);
-        console.log('searchResults', searchResults);
         if (searchResults.length == 0) {
           setError('未找到匹配结果');
           setLoading(false);
@@ -256,8 +268,6 @@ function PlayPageClient() {
         setCurrentSource(searchResults[0].source);
         setCurrentId(searchResults[0].id);
         setVideoYear(searchResults[0].year);
-        setVideoType('');
-        setVideoDoubanId(''); // 清空豆瓣ID
         // 替换URL参数
         const newUrl = new URL(window.location.href);
         newUrl.searchParams.set('source', searchResults[0].source);
@@ -270,21 +280,23 @@ function PlayPageClient() {
 
       const fetchDetail = async () => {
         try {
+          setLoadingStage('fetching');
+          setLoadingMessage('🎬 正在获取视频详情...');
+
           const detailData = await fetchVideoDetail({
             source: currentSource,
             id: currentId,
-            fallbackTitle: videoTitle.trim(),
-            fallbackYear: videoYear,
+            fallbackTitle: videoTitleRef.current.trim(),
+            fallbackYear: videoYearRef.current,
           });
 
           // 更新状态保存详情
-          setVideoTitle(detailData.title || videoTitle);
+          setVideoTitle(detailData.title || videoTitleRef.current);
           setVideoCover(detailData.poster);
           setDetail(detailData);
 
           // 确保集数索引在有效范围内
           if (currentEpisodeIndex >= detailData.episodes.length) {
-            console.log('currentEpisodeIndex', currentEpisodeIndex);
             setCurrentEpisodeIndex(0);
           }
 
@@ -295,9 +307,17 @@ function PlayPageClient() {
             newUrl.searchParams.delete('position');
             window.history.replaceState({}, '', newUrl.toString());
           }
+
+          setLoadingStage('ready');
+          setLoadingMessage('✨ 准备就绪，即将开始播放...');
+
+          // 短暂延迟让用户看到完成状态
+          setTimeout(() => {
+            setLoading(false);
+          }, 1000);
         } catch (err) {
           console.error('获取视频详情失败:', err);
-        } finally {
+          setError(err instanceof Error ? err.message : '获取视频详情失败');
           setLoading(false);
         }
       };
@@ -411,28 +431,22 @@ function PlayPageClient() {
         // 只选择和当前视频标题完全匹配的结果，如果有年份，还需要年份完全匹配
         const exactMatchs = results.filter(
           (result) =>
-            result.title.toLowerCase() === videoTitle.toLowerCase() &&
-            (videoYear
-              ? result.year.toLowerCase() === videoYear.toLowerCase()
+            result.title.toLowerCase() ===
+              videoTitleRef.current.toLowerCase() &&
+            (videoYearRef.current
+              ? result.year.toLowerCase() === videoYearRef.current.toLowerCase()
               : true) &&
-            (detail
-              ? (detail.episodes.length === 1 &&
+            (detailRef.current
+              ? (detailRef.current.episodes.length === 1 &&
                   result.episodes.length === 1) ||
-                (detail.episodes.length > 1 && result.episodes.length > 1)
-              : true) &&
-            (videoDoubanId && result.douban_id
-              ? result.douban_id.toString() === videoDoubanId
-              : true) &&
-            (videoType
-              ? (videoType === 'movie' && result.episodes.length === 1) ||
-                (videoType === 'tv' && result.episodes.length > 1)
+                (detailRef.current.episodes.length > 1 &&
+                  result.episodes.length > 1)
               : true)
         );
         if (exactMatchs.length > 0) {
           processedResults.push(...exactMatchs);
         }
       });
-      console.log('processedResults', processedResults);
 
       setAvailableSources(processedResults);
       return processedResults;
@@ -460,9 +474,12 @@ function PlayPageClient() {
       setError(null);
 
       // 清除前一个历史记录
-      if (currentSource && currentId) {
+      if (currentSourceRef.current && currentIdRef.current) {
         try {
-          await deletePlayRecord(currentSource, currentId);
+          await deletePlayRecord(
+            currentSourceRef.current,
+            currentIdRef.current
+          );
           console.log('已清除前一个播放记录');
         } catch (err) {
           console.error('清除播放记录失败:', err);
@@ -474,7 +491,7 @@ function PlayPageClient() {
         source: newSource,
         id: newId,
         fallbackTitle: newTitle.trim(),
-        fallbackYear: videoYear,
+        fallbackYear: videoYearRef.current,
       });
 
       // 尝试跳转到当前正在播放的集数
@@ -745,17 +762,27 @@ function PlayPageClient() {
 
   // 切换收藏
   const handleToggleFavorite = async () => {
-    if (!videoTitleRef.current || !detailRef.current || !currentSourceRef.current || !currentIdRef.current) return;
+    if (
+      !videoTitleRef.current ||
+      !detailRef.current ||
+      !currentSourceRef.current ||
+      !currentIdRef.current
+    )
+      return;
 
     try {
-      const newState = await toggleFavorite(currentSourceRef.current, currentIdRef.current, {
-        title: videoTitleRef.current,
-        source_name: detailRef.current?.source_name || '',
-        year: detailRef.current?.year || '',
-        cover: detailRef.current?.poster || '',
-        total_episodes: detailRef.current?.episodes.length || 1,
-        save_time: Date.now(),
-      });
+      const newState = await toggleFavorite(
+        currentSourceRef.current,
+        currentIdRef.current,
+        {
+          title: videoTitleRef.current,
+          source_name: detailRef.current?.source_name || '',
+          year: detailRef.current?.year || '',
+          cover: detailRef.current?.poster || '',
+          total_episodes: detailRef.current?.episodes.length || 1,
+          save_time: Date.now(),
+        }
+      );
       setFavorited(newState);
     } catch (err) {
       console.error('切换收藏失败:', err);
@@ -804,7 +831,6 @@ function PlayPageClient() {
       }集`;
       artPlayerRef.current.poster = videoCover;
       if (artPlayerRef.current?.video) {
-        console.log('attachVideoEventListeners');
         attachVideoEventListeners(
           artPlayerRef.current.video as HTMLVideoElement
         );
@@ -928,12 +954,22 @@ function PlayPageClient() {
             onClick() {
               const newVal = !blockAdEnabled;
               try {
-                saveCurrentPlayProgress();
                 localStorage.setItem('enable_blockad', String(newVal));
+                if (artPlayerRef.current) {
+                  resumeTimeRef.current = artPlayerRef.current.currentTime;
+                  if (
+                    artPlayerRef.current.video &&
+                    artPlayerRef.current.video.hls
+                  ) {
+                    artPlayerRef.current.video.hls.destroy();
+                  }
+                  artPlayerRef.current.destroy();
+                  artPlayerRef.current = null;
+                }
+                setBlockAdEnabled(newVal);
               } catch (_) {
                 // ignore
               }
-              window.location.reload();
               return newVal ? '当前开启' : '当前关闭';
             },
           },
@@ -1030,7 +1066,6 @@ function PlayPageClient() {
       });
 
       if (artPlayerRef.current?.video) {
-        console.log('attachVideoEventListeners');
         attachVideoEventListeners(
           artPlayerRef.current.video as HTMLVideoElement
         );
@@ -1043,7 +1078,7 @@ function PlayPageClient() {
       console.error('创建播放器失败:', err);
       setError('播放器初始化失败');
     }
-  }, [Artplayer, Hls, videoUrl]);
+  }, [Artplayer, Hls, videoUrl, loading, blockAdEnabled]);
 
   // ---------------------------------------------------------------------------
   // 视频元素事件监听
@@ -1170,12 +1205,86 @@ function PlayPageClient() {
   if (loading) {
     return (
       <PageLayout activePath='/play'>
-        <div className='flex items-center justify-center h-screen'>
-          <div className='text-center'>
-            <div className='animate-spin rounded-full h-32 w-32 border-b-2 border-green-500 mx-auto mb-4'></div>
-            <p className='text-lg text-gray-600 dark:text-gray-300'>
-              加载中...
-            </p>
+        <div className='flex items-center justify-center min-h-screen bg-transparent'>
+          <div className='text-center max-w-md mx-auto px-6'>
+            {/* 动画影院图标 */}
+            <div className='relative mb-8'>
+              <div className='relative mx-auto w-24 h-24 bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl shadow-2xl flex items-center justify-center transform hover:scale-105 transition-transform duration-300'>
+                <div className='text-white text-4xl'>
+                  {loadingStage === 'searching' && '🔍'}
+                  {loadingStage === 'fetching' && '🎬'}
+                  {loadingStage === 'ready' && '✨'}
+                </div>
+                {/* 旋转光环 */}
+                <div className='absolute -inset-2 bg-gradient-to-r from-green-500 to-emerald-600 rounded-2xl opacity-20 animate-spin'></div>
+              </div>
+
+              {/* 浮动粒子效果 */}
+              <div className='absolute top-0 left-0 w-full h-full pointer-events-none'>
+                <div className='absolute top-2 left-2 w-2 h-2 bg-green-400 rounded-full animate-bounce'></div>
+                <div
+                  className='absolute top-4 right-4 w-1.5 h-1.5 bg-emerald-400 rounded-full animate-bounce'
+                  style={{ animationDelay: '0.5s' }}
+                ></div>
+                <div
+                  className='absolute bottom-3 left-6 w-1 h-1 bg-lime-400 rounded-full animate-bounce'
+                  style={{ animationDelay: '1s' }}
+                ></div>
+              </div>
+            </div>
+
+            {/* 进度指示器 */}
+            <div className='mb-6 w-80 mx-auto'>
+              <div className='flex justify-center space-x-2 mb-4'>
+                <div
+                  className={`w-3 h-3 rounded-full transition-all duration-500 ${
+                    loadingStage === 'searching'
+                      ? 'bg-green-500 scale-125'
+                      : loadingStage === 'fetching' || loadingStage === 'ready'
+                      ? 'bg-green-500'
+                      : 'bg-gray-300'
+                  }`}
+                ></div>
+                <div
+                  className={`w-3 h-3 rounded-full transition-all duration-500 ${
+                    loadingStage === 'fetching'
+                      ? 'bg-green-500 scale-125'
+                      : loadingStage === 'ready'
+                      ? 'bg-green-500'
+                      : 'bg-gray-300'
+                  }`}
+                ></div>
+                <div
+                  className={`w-3 h-3 rounded-full transition-all duration-500 ${
+                    loadingStage === 'ready'
+                      ? 'bg-green-500 scale-125'
+                      : 'bg-gray-300'
+                  }`}
+                ></div>
+              </div>
+
+              {/* 进度条 */}
+              <div className='w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2 overflow-hidden'>
+                <div
+                  className='h-full bg-gradient-to-r from-green-500 to-emerald-600 rounded-full transition-all duration-1000 ease-out'
+                  style={{
+                    width:
+                      loadingStage === 'searching'
+                        ? '33%'
+                        : loadingStage === 'fetching'
+                        ? '66%'
+                        : '100%',
+                  }}
+                ></div>
+              </div>
+            </div>
+
+            {/* 加载消息 */}
+            <div className='space-y-2'>
+              <p className='text-xl font-semibold text-gray-800 dark:text-gray-200 animate-pulse'>
+                {loadingMessage}
+              </p>
+            </div>
           </div>
         </div>
       </PageLayout>
@@ -1185,24 +1294,65 @@ function PlayPageClient() {
   if (error) {
     return (
       <PageLayout activePath='/play'>
-        <div className='flex items-center justify-center h-screen'>
-          <div className='text-center'>
-            <div className='text-red-500 text-6xl mb-4'>⚠️</div>
-            <p className='text-lg text-red-600 dark:text-red-400 mb-4'>
-              {error}
-            </p>
-            <button
-              onClick={() =>
-                videoTitle
-                  ? (window.location.href = `/search?q=${encodeURIComponent(
-                      videoTitle
-                    )}`)
-                  : window.history.back()
-              }
-              className='px-4 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 transition-colors'
-            >
-              {videoTitle ? '返回搜索' : '返回'}
-            </button>
+        <div className='flex items-center justify-center min-h-screen bg-transparent'>
+          <div className='text-center max-w-md mx-auto px-6'>
+            {/* 错误图标 */}
+            <div className='relative mb-8'>
+              <div className='relative mx-auto w-24 h-24 bg-gradient-to-r from-red-500 to-orange-500 rounded-2xl shadow-2xl flex items-center justify-center transform hover:scale-105 transition-transform duration-300'>
+                <div className='text-white text-4xl'>😵</div>
+                {/* 脉冲效果 */}
+                <div className='absolute -inset-2 bg-gradient-to-r from-red-500 to-orange-500 rounded-2xl opacity-20 animate-pulse'></div>
+              </div>
+
+              {/* 浮动错误粒子 */}
+              <div className='absolute top-0 left-0 w-full h-full pointer-events-none'>
+                <div className='absolute top-2 left-2 w-2 h-2 bg-red-400 rounded-full animate-bounce'></div>
+                <div
+                  className='absolute top-4 right-4 w-1.5 h-1.5 bg-orange-400 rounded-full animate-bounce'
+                  style={{ animationDelay: '0.5s' }}
+                ></div>
+                <div
+                  className='absolute bottom-3 left-6 w-1 h-1 bg-yellow-400 rounded-full animate-bounce'
+                  style={{ animationDelay: '1s' }}
+                ></div>
+              </div>
+            </div>
+
+            {/* 错误信息 */}
+            <div className='space-y-4 mb-8'>
+              <h2 className='text-2xl font-bold text-gray-800 dark:text-gray-200'>
+                哎呀，出现了一些问题
+              </h2>
+              <div className='bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4'>
+                <p className='text-red-600 dark:text-red-400 font-medium'>
+                  {error}
+                </p>
+              </div>
+              <p className='text-sm text-gray-500 dark:text-gray-400'>
+                请检查网络连接或尝试刷新页面
+              </p>
+            </div>
+
+            {/* 操作按钮 */}
+            <div className='space-y-3'>
+              <button
+                onClick={() =>
+                  videoTitle
+                    ? router.push(`/search?q=${encodeURIComponent(videoTitle)}`)
+                    : router.back()
+                }
+                className='w-full px-6 py-3 bg-gradient-to-r from-green-500 to-emerald-600 text-white rounded-xl font-medium hover:from-green-600 hover:to-emerald-700 transform hover:scale-105 transition-all duration-200 shadow-lg hover:shadow-xl'
+              >
+                {videoTitle ? '🔍 返回搜索' : '← 返回上页'}
+              </button>
+
+              <button
+                onClick={() => window.location.reload()}
+                className='w-full px-6 py-3 bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl font-medium hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors duration-200'
+              >
+                🔄 重新尝试
+              </button>
+            </div>
           </div>
         </div>
       </PageLayout>
